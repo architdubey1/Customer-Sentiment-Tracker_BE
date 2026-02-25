@@ -8,7 +8,7 @@ const HTTP_STATUS = require("../constants/httpStatus");
 const analyze = asyncHandler(async (req, res) => {
   const { text } = req.body;
 
-  const { sentiment, score, urgency, keywords } = await analyzeSentiment(text);
+  const { sentiment, score, urgency, keywords, issueCategory } = await analyzeSentiment(text);
 
   const { priorityScore, priorityLevel } = await calculatePriority({
     score,
@@ -21,6 +21,7 @@ const analyze = asyncHandler(async (req, res) => {
     score,
     urgency,
     urgencyKeywords: keywords,
+    issueCategory,
     priorityScore,
     priorityLevel,
   });
@@ -35,6 +36,7 @@ const analyze = asyncHandler(async (req, res) => {
       score: feedback.score,
       urgency: feedback.urgency,
       urgencyKeywords: feedback.urgencyKeywords,
+      issueCategory: feedback.issueCategory,
       priorityScore: feedback.priorityScore,
       priorityLevel: feedback.priorityLevel,
       timestamp: feedback.createdAt,
@@ -46,6 +48,8 @@ const getAll = asyncHandler(async (req, res) => {
   const {
     sentiment,
     priority,
+    category,
+    search,
     sortBy = "createdAt",
     page = 1,
     limit = 20,
@@ -54,6 +58,8 @@ const getAll = asyncHandler(async (req, res) => {
   const filter = {};
   if (sentiment) filter.sentiment = sentiment.toLowerCase();
   if (priority) filter.priorityLevel = priority.toLowerCase();
+  if (category) filter.issueCategory = category.toLowerCase();
+  if (search) filter.senderEmail = { $regex: search.trim(), $options: "i" };
 
   const sortOptions = sortBy === "priority"
     ? { priorityScore: -1, createdAt: -1 }
@@ -100,16 +106,18 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const getPriorityQueue = asyncHandler(async (req, res) => {
-  const { level, limit = 20, page = 1 } = req.query;
+  const { level, category, search, limit = 20, page = 1 } = req.query;
 
   const filter = {
     priorityLevel: { $in: ["critical", "high"] },
   };
   if (level) filter.priorityLevel = level.toLowerCase();
+  if (category) filter.issueCategory = category.toLowerCase();
+  if (search) filter.senderEmail = { $regex: search.trim(), $options: "i" };
 
   const skip = (Number(page) - 1) * Number(limit);
 
-  const [results, total, summary] = await Promise.all([
+  const [results, total, summary, categoryBreakdown] = await Promise.all([
     Feedback.find(filter)
       .sort({ priorityScore: -1, createdAt: -1 })
       .skip(skip)
@@ -126,6 +134,11 @@ const getPriorityQueue = asyncHandler(async (req, res) => {
       },
       { $sort: { avgScore: -1 } },
     ]),
+    Feedback.aggregate([
+      { $match: level ? { priorityLevel: level.toLowerCase() } : { priorityLevel: { $in: ["critical", "high"] } } },
+      { $group: { _id: "$issueCategory", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]),
   ]);
 
   const counts = {};
@@ -133,10 +146,16 @@ const getPriorityQueue = asyncHandler(async (req, res) => {
     counts[item._id] = { count: item.count, avgScore: Math.round(item.avgScore) };
   }
 
+  const categories = {};
+  for (const item of categoryBreakdown) {
+    categories[item._id || "other"] = item.count;
+  }
+
   sendSuccess(res, {
     message: "Priority queue retrieved",
     data: {
       summary: counts,
+      categories,
       results,
       pagination: {
         total,

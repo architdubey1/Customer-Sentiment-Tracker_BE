@@ -1,7 +1,9 @@
 const geminiModel = require("../config/gemini");
 const { SENTIMENT_TYPES } = require("../constants/sentiments");
-const { URGENCY_LEVELS } = require("../constants/priority");
+const { URGENCY_LEVELS, ISSUE_CATEGORIES } = require("../constants/priority");
 const logger = require("../logs/logger");
+
+const VALID_CATEGORIES = Object.values(ISSUE_CATEGORIES);
 
 const SYSTEM_PROMPT = `You are a customer support sentiment and urgency analysis engine. Analyze the given customer feedback text and respond ONLY with valid JSON — no markdown, no code fences, no extra text.
 
@@ -10,7 +12,8 @@ Response format:
   "sentiment": "<positive|negative|neutral|mixed>",
   "score": <float between -1.0 and 1.0>,
   "urgency": "<critical|high|moderate|low>",
-  "keywords": ["<matched issue keywords>"]
+  "keywords": ["<matched issue keywords>"],
+  "issueCategory": "<missing_item|damaged|refund|replacement|cancellation|billing|late_delivery|wrong_item|account_issue|fraud|poor_service|other>"
 }
 
 Scoring guide:
@@ -27,6 +30,20 @@ Urgency guide:
 - high: strong dissatisfaction, mentions switching to competitor, repeated complaints, unacceptable service, missing items
 - moderate: general disappointment, delayed responses, unmet expectations, still waiting
 - low: minor feedback, suggestions, neutral or positive comments
+
+Issue category guide (pick the single best match):
+- missing_item: order or items never arrived, package lost, missing from delivery
+- damaged: product arrived broken, defective, or physically damaged
+- refund: customer requesting money back, refund not processed
+- replacement: customer wants a replacement or exchange for a product
+- cancellation: customer wants to cancel an order, subscription, or service
+- billing: overcharged, double charged, billing errors, payment disputes
+- late_delivery: shipping delays, delivery took too long, still waiting for delivery
+- wrong_item: received incorrect product, wrong size/color/model
+- account_issue: login problems, account locked, password reset, access denied
+- fraud: suspected scam, unauthorized charges, identity theft concerns
+- poor_service: bad customer support experience, rude staff, no response, slow resolution
+- other: doesn't fit any above category, or positive/neutral general feedback
 
 Keywords: extract specific issue keywords from the text such as "refund", "cancel", "missing items", "missing order", "wrong item", "broken", "damaged", "late delivery", "no response", "overcharged", "billing issue", "account locked", "lawsuit", "lawyer", "competitor", "switching", "scam", "fraud", etc. Return an empty array if no issue keywords are found.`;
 
@@ -54,7 +71,11 @@ const analyzeSentiment = async (text) => {
       ? parsed.keywords.map((k) => String(k).toLowerCase().trim()).filter(Boolean)
       : [];
 
-    return { sentiment, score, urgency, keywords };
+    const issueCategory = VALID_CATEGORIES.includes(parsed.issueCategory)
+      ? parsed.issueCategory
+      : "other";
+
+    return { sentiment, score, urgency, keywords, issueCategory };
   } catch (error) {
     logger.error(`Gemini analysis failed: ${error.message}`);
     throw Object.assign(new Error("Sentiment analysis service unavailable"), {

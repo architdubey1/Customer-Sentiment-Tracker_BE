@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const { SENTIMENT_LABELS } = require("../../constants/sentiments");
-const { PRIORITY_LABELS, URGENCY_LABELS } = require("../../constants/priority");
+const { PRIORITY_LABELS, URGENCY_LABELS, ISSUE_CATEGORY_LABELS } = require("../../constants/priority");
 
 const feedbackSchema = new mongoose.Schema(
   {
@@ -65,6 +65,12 @@ const feedbackSchema = new mongoose.Schema(
       enum: PRIORITY_LABELS,
       default: "low",
     },
+    issueCategory: {
+      type: String,
+      enum: ISSUE_CATEGORY_LABELS,
+      default: "other",
+      lowercase: true,
+    },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
@@ -80,5 +86,6 @@ feedbackSchema.index({ createdAt: -1 });
 feedbackSchema.index({ senderEmail: 1 });
 feedbackSchema.index({ priorityScore: -1 });
 feedbackSchema.index({ priorityLevel: 1, priorityScore: -1 });
+feedbackSchema.index({ issueCategory: 1 });
 
 module.exports = mongoose.model("Feedback", feedbackSchema);

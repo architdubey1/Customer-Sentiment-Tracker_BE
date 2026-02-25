@@ -114,7 +114,7 @@ async function scanEmails({ maxResults = 10 } = {}) {
 
       const text = body.slice(0, 5000);
 
-      const { sentiment, score, urgency, keywords } = await analyzeSentiment(text);
+      const { sentiment, score, urgency, keywords, issueCategory } = await analyzeSentiment(text);
 
       const { priorityScore, priorityLevel } = await calculatePriority({
         score,
@@ -148,6 +148,7 @@ async function scanEmails({ maxResults = 10 } = {}) {
         emailSubject: subject,
         urgency,
         urgencyKeywords: keywords,
+        issueCategory,
         priorityScore,
         priorityLevel,
         customer: customer._id,
@@ -172,6 +173,7 @@ async function scanEmails({ maxResults = 10 } = {}) {
         score,
         urgency,
         urgencyKeywords: keywords,
+        issueCategory,
         priorityScore,
         priorityLevel,
       });
