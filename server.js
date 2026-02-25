@@ -13,6 +13,7 @@ const statsRoutes = require("./routes/statsRoutes");
 const customerRoutes = require("./routes/customerRoutes");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+const voiceAgentRoutes = require("./routes/voiceAgentRoutes");
 const { notFoundHandler, globalErrorHandler } = require("./middlewares/errorHandler");
 const { startPolling } = require("./tools/cronPoller");
 
@@ -34,6 +35,7 @@ app.use("/api/mail", scanLimiter, mailRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/voice-agents", voiceAgentRoutes);
 
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
