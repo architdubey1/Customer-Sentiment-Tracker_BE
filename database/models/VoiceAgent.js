@@ -33,6 +33,7 @@ const voiceAgentSchema = new mongoose.Schema(
     },
     callEndMessage: { type: String, default: "" },
     uninterruptibleReasons: { type: [String], default: [] },
+    isDefaultCaller: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
