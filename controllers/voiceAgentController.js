@@ -58,6 +58,7 @@ exports.updateAgent = async (req, res) => {
       "selectedTools", "libraryAccess",
       "elevenlabsVoiceId", "callEndPrompt",
       "callEndMessageType", "callEndMessage", "uninterruptibleReasons",
+      "clientEvents", "ttsSpeed",
     ];
 
     const update = {};
