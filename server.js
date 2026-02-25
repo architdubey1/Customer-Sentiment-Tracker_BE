@@ -11,6 +11,7 @@ const sentimentRoutes = require("./routes/sentimentRoutes");
 const mailRoutes = require("./routes/mailRoutes");
 const statsRoutes = require("./routes/statsRoutes");
 const customerRoutes = require("./routes/customerRoutes");
+const authRoutes = require("./routes/authRoutes");
 const { notFoundHandler, globalErrorHandler } = require("./middlewares/errorHandler");
 const { startPolling } = require("./tools/cronPoller");
 
@@ -25,6 +26,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
 
+app.use("/api/auth", apiLimiter, authRoutes);
 app.use("/api", apiLimiter, apiKeyAuth);
 app.use("/api/sentiment", sentimentRoutes);
 app.use("/api/mail", scanLimiter, mailRoutes);
@@ -36,6 +38,16 @@ app.use(globalErrorHandler);
 
 const start = async () => {
   await connectDB();
+
+  if (process.env.SEED_ADMIN_USER === "true") {
+    const User = require("./database/models/User");
+    const { hashPassword } = require("./utils/passwordHash");
+    const existing = await User.findOne({ username: "admin" });
+    if (!existing) {
+      await User.create({ username: "admin", passwordHash: hashPassword("password") });
+      logger.info("Admin user seeded (username: admin, password: password)");
+    }
+  }
 
   if (process.env.AUTOMATE_POLLING === "true") {
     const interval = Number(process.env.POLL_INTERVAL_MINUTES) || 5;
