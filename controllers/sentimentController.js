@@ -80,6 +80,7 @@ const getAll = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(Number(limit))
       .populate("assignedTo", "username displayName")
+      .populate("customer", "name email phone")
       .select("-__v"),
     Feedback.countDocuments(filter),
   ]);
@@ -101,6 +102,7 @@ const getAll = asyncHandler(async (req, res) => {
 const getById = asyncHandler(async (req, res) => {
   const feedback = await Feedback.findById(req.params.id)
     .populate("assignedTo", "username displayName")
+    .populate("customer", "name email phone")
     .select("-__v");
 
   if (!feedback) {
@@ -139,6 +141,7 @@ const getPriorityQueue = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(Number(limit))
       .populate("assignedTo", "username displayName")
+      .populate("customer", "name email phone")
       .select("-__v"),
     Feedback.countDocuments(filter),
     Feedback.aggregate([

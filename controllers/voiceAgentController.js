@@ -136,14 +136,105 @@ exports.getSignedUrl = async (req, res) => {
     if (!apiKey) return res.status(500).json({ error: "ELEVENLABS_API_KEY not configured" });
 
     const agent = await getOrCreateAgent(req.params.id);
+
     if (!agent.elevenlabsAgentId) {
-      return res.status(400).json({ error: "Agent not synced to ElevenLabs yet. Sync first." });
+      logger.info(`Auto-syncing agent "${agent.agentId}" to ElevenLabs before voice test`);
+      const syncResult = await syncAgentToElevenLabs(
+        { ...agent.toObject(), id: agent.agentId },
+        apiKey
+      );
+      if (!syncResult.ok) {
+        return res.status(500).json({ error: `Auto-sync failed: ${syncResult.error}` });
+      }
+      agent.elevenlabsAgentId = syncResult.agentId;
+      await agent.save();
     }
 
     const signedUrl = await fetchSignedUrl(agent.elevenlabsAgentId, apiKey);
     res.json({ signedUrl });
   } catch (err) {
     logger.error(`getSignedUrl error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.setDefault = async (req, res) => {
+  try {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    await VoiceAgent.updateMany({}, { isDefaultCaller: false });
+    const agent = await getOrCreateAgent(req.params.id);
+    agent.isDefaultCaller = true;
+
+    if (apiKey) {
+      logger.info(`Syncing agent "${agent.agentId}" to ElevenLabs on set-default`);
+      const syncResult = await syncAgentToElevenLabs(
+        { ...agent.toObject(), id: agent.agentId },
+        apiKey
+      );
+      if (syncResult.ok) {
+        agent.elevenlabsAgentId = syncResult.agentId;
+      } else {
+        logger.warn(`Sync on set-default failed: ${syncResult.error}`);
+      }
+    }
+
+    await agent.save();
+    res.json({ success: true, agentId: agent.agentId, elevenlabsAgentId: agent.elevenlabsAgentId });
+  } catch (err) {
+    logger.error(`setDefault error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getDefault = async (_req, res) => {
+  try {
+    const agent = await VoiceAgent.findOne({ isDefaultCaller: true });
+    res.json({ agent: agent || null });
+  } catch (err) {
+    logger.error(`getDefault error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.callCustomer = async (req, res) => {
+  try {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const phoneNumberId = process.env.ELEVENLABS_TWILIO_PHONE_NUMBER_ID;
+    if (!apiKey) return res.status(500).json({ error: "ELEVENLABS_API_KEY not configured" });
+    if (!phoneNumberId) return res.status(500).json({ error: "ELEVENLABS_TWILIO_PHONE_NUMBER_ID not configured" });
+
+    const agent = await VoiceAgent.findOne({ isDefaultCaller: true });
+    if (!agent) return res.status(400).json({ error: "No default calling agent set. Go to Voice Bot and set one." });
+
+    logger.info(`Syncing default agent "${agent.agentId}" to ElevenLabs before call`);
+    const syncResult = await syncAgentToElevenLabs(
+      { ...agent.toObject(), id: agent.agentId },
+      apiKey
+    );
+    if (syncResult.ok) {
+      agent.elevenlabsAgentId = syncResult.agentId;
+      await agent.save();
+    } else if (!agent.elevenlabsAgentId) {
+      return res.status(500).json({ error: `Sync failed: ${syncResult.error}` });
+    }
+
+    const { toNumber: rawNumber, dynamicVariables } = req.body;
+    let toNumber = (rawNumber || "").trim().replace(/\s+/g, "");
+    if (toNumber && !toNumber.startsWith("+")) {
+      toNumber = "+91" + toNumber;
+    }
+    const result = await startOutboundCall({
+      apiKey,
+      agentId: agent.elevenlabsAgentId,
+      agentPhoneNumberId: phoneNumberId,
+      toNumber,
+      dynamicVariables,
+    });
+
+    if (!result.ok) return res.status(500).json({ error: result.error });
+    res.json({ ...result, usedAgent: agent.agentId });
+  } catch (err) {
+    logger.error(`callCustomer error: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 };
@@ -156,11 +247,25 @@ exports.startPhoneCall = async (req, res) => {
     if (!phoneNumberId) return res.status(500).json({ error: "ELEVENLABS_TWILIO_PHONE_NUMBER_ID not configured" });
 
     const agent = await getOrCreateAgent(req.params.id);
+
     if (!agent.elevenlabsAgentId) {
-      return res.status(400).json({ error: "Agent not synced to ElevenLabs yet. Sync first." });
+      logger.info(`Auto-syncing agent "${agent.agentId}" to ElevenLabs before call`);
+      const syncResult = await syncAgentToElevenLabs(
+        { ...agent.toObject(), id: agent.agentId },
+        apiKey
+      );
+      if (!syncResult.ok) {
+        return res.status(500).json({ error: `Auto-sync failed: ${syncResult.error}` });
+      }
+      agent.elevenlabsAgentId = syncResult.agentId;
+      await agent.save();
     }
 
-    const { toNumber, dynamicVariables } = req.body;
+    const { toNumber: rawNumber, dynamicVariables } = req.body;
+    let toNumber = (rawNumber || "").trim().replace(/\s+/g, "");
+    if (toNumber && !toNumber.startsWith("+")) {
+      toNumber = "+91" + toNumber;
+    }
     const result = await startOutboundCall({
       apiKey,
       agentId: agent.elevenlabsAgentId,

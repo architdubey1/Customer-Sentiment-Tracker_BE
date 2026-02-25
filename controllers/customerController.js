@@ -64,4 +64,23 @@ const getById = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getAll, getById };
+const updateCustomer = asyncHandler(async (req, res) => {
+  const customer = await Customer.findOne({
+    $or: [{ _id: req.params.id }, { customerId: req.params.id }],
+  });
+
+  if (!customer) {
+    const err = new Error("Customer not found");
+    err.statusCode = HTTP_STATUS.NOT_FOUND;
+    throw err;
+  }
+
+  const { phone, name } = req.body;
+  if (phone !== undefined) customer.phone = phone;
+  if (name !== undefined) customer.name = name;
+  await customer.save();
+
+  sendSuccess(res, { message: "Customer updated", data: customer });
+});
+
+module.exports = { getAll, getById, updateCustomer };

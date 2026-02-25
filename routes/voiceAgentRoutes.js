@@ -5,7 +5,10 @@ const ctrl = require("../controllers/voiceAgentController");
 router.use(requireAuth);
 
 router.get("/", ctrl.listAgents);
+router.get("/default", ctrl.getDefault);
+router.post("/call-customer", ctrl.callCustomer);
 router.get("/:id", ctrl.getAgent);
+router.post("/:id/set-default", ctrl.setDefault);
 router.post("/:id", ctrl.updateAgent);
 router.post("/:id/chat", ctrl.chat);
 router.post("/:id/sync-elevenlabs", ctrl.syncElevenLabs);

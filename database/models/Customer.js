@@ -27,6 +27,11 @@ const customerSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     feedbackCount: {
       type: Number,
       default: 0,

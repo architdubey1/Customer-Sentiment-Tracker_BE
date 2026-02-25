@@ -37,6 +37,7 @@ const voiceAgentSchema = new mongoose.Schema(
     clientEvents: { type: [String], default: [] },
     /** TTS speech speed (0.5–1.2, default 1). ElevenLabs agent response speed; API max is 1.2. */
     ttsSpeed: { type: Number, default: 1, min: 0.5, max: 1.2 },
+    isDefaultCaller: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
