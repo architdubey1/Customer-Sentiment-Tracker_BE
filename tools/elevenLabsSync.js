@@ -48,6 +48,22 @@ function buildAgentPrompt(config) {
   return `${main}\n\n### Call End\n${callEndPrompt}${uninterruptible}\n\n${closingInstruction}`;
 }
 
+/** Default client_events when not overridden (includes interruption for natural conversation). */
+const DEFAULT_CLIENT_EVENTS = [
+  "conversation_initiation_metadata",
+  "asr_initiation_metadata",
+  "ping",
+  "audio",
+  "interruption",
+  "user_transcript",
+  "tentative_user_transcript",
+  "agent_response",
+  "agent_response_correction",
+  "agent_response_metadata",
+  "agent_chat_response_part",
+  "client_error",
+];
+
 function buildConversationConfig(config) {
   const llm = EL_LLM_MAP[config.model] ?? "gpt-4.1-mini";
   const fullPrompt = buildAgentPrompt(config);
@@ -60,7 +76,19 @@ function buildConversationConfig(config) {
     dynamicVariablePlaceholders[name] = "";
   }
 
+  const clientEvents =
+    config.clientEvents && config.clientEvents.length > 0
+      ? config.clientEvents
+      : DEFAULT_CLIENT_EVENTS;
+
   return {
+    conversation: {
+      client_events: clientEvents,
+    },
+    turn: {
+      turn_eagerness: "eager",
+      speculative_turn: true,
+    },
     agent: {
       first_message: config.firstMessage || undefined,
       language: "en",
@@ -98,6 +126,7 @@ function buildConversationConfig(config) {
     tts: {
       model_id: "eleven_multilingual_v2",
       ...(config.elevenlabsVoiceId && { voice_id: config.elevenlabsVoiceId }),
+      ...(config.ttsSpeed != null && Number(config.ttsSpeed) === config.ttsSpeed && { speed: Math.min(1.2, Math.max(0.5, config.ttsSpeed)) }),
     },
   };
 }

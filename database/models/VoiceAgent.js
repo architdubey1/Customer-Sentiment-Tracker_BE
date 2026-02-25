@@ -33,6 +33,10 @@ const voiceAgentSchema = new mongoose.Schema(
     },
     callEndMessage: { type: String, default: "" },
     uninterruptibleReasons: { type: [String], default: [] },
+    /** ElevenLabs conversation client_events (e.g. interruption, user_transcript). Empty = use default with interruption enabled. */
+    clientEvents: { type: [String], default: [] },
+    /** TTS speech speed (0.5–1.2, default 1). ElevenLabs agent response speed; API max is 1.2. */
+    ttsSpeed: { type: Number, default: 1, min: 0.5, max: 1.2 },
   },
   { timestamps: true }
 );
