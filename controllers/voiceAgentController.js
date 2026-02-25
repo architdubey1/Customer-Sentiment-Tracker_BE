@@ -206,16 +206,15 @@ exports.callCustomer = async (req, res) => {
     const agent = await VoiceAgent.findOne({ isDefaultCaller: true });
     if (!agent) return res.status(400).json({ error: "No default calling agent set. Go to Voice Bot and set one." });
 
-    logger.info(`Syncing default agent "${agent.agentId}" to ElevenLabs before call`);
-    const syncResult = await syncAgentToElevenLabs(
-      { ...agent.toObject(), id: agent.agentId },
-      apiKey
-    );
-    if (syncResult.ok) {
+    if (!agent.elevenlabsAgentId) {
+      logger.info(`Auto-syncing default agent "${agent.agentId}" to ElevenLabs before call`);
+      const syncResult = await syncAgentToElevenLabs(
+        { ...agent.toObject(), id: agent.agentId },
+        apiKey
+      );
+      if (!syncResult.ok) return res.status(500).json({ error: `Sync failed: ${syncResult.error}` });
       agent.elevenlabsAgentId = syncResult.agentId;
       await agent.save();
-    } else if (!agent.elevenlabsAgentId) {
-      return res.status(500).json({ error: `Sync failed: ${syncResult.error}` });
     }
 
     const { toNumber: rawNumber, dynamicVariables } = req.body;
@@ -231,10 +230,47 @@ exports.callCustomer = async (req, res) => {
       dynamicVariables,
     });
 
+    logger.info(`callCustomer result: ${JSON.stringify(result)}`);
     if (!result.ok) return res.status(500).json({ error: result.error });
     res.json({ ...result, usedAgent: agent.agentId });
   } catch (err) {
     logger.error(`callCustomer error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.endCall = async (req, res) => {
+  try {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) {
+      return res.status(500).json({ error: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN not configured" });
+    }
+
+    const { callSid } = req.body;
+    if (!callSid) return res.status(400).json({ error: "callSid is required" });
+
+    const twilioRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+        },
+        body: "Status=completed",
+      }
+    );
+
+    if (!twilioRes.ok) {
+      const text = await twilioRes.text();
+      logger.error(`Twilio end call error: ${twilioRes.status} ${text}`);
+      return res.status(twilioRes.status).json({ error: "Failed to end call" });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`endCall error: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 };
