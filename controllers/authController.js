@@ -5,7 +5,8 @@ const HTTP_STATUS = require("../constants/httpStatus");
 const { verifyPassword } = require("../utils/passwordHash");
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "css-dashboard-secret-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET environment variable is required");
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 /**
@@ -49,7 +50,7 @@ const login = asyncHandler(async (req, res) => {
     message: "Login successful",
     data: {
       token,
-      user: { username: user.username },
+      user: { id: user._id, username: user.username, displayName: user.displayName || user.username },
       expiresIn: JWT_EXPIRES_IN,
     },
   });

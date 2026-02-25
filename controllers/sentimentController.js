@@ -67,11 +67,19 @@ const getAll = asyncHandler(async (req, res) => {
 
   const skip = (Number(page) - 1) * Number(limit);
 
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.assignedTo === "unassigned") {
+    filter.$or = [{ assignedTo: null }, { assignedTo: { $exists: false } }];
+  } else if (req.query.assignedTo) {
+    filter.assignedTo = req.query.assignedTo;
+  }
+
   const [results, total] = await Promise.all([
     Feedback.find(filter)
       .sort(sortOptions)
       .skip(skip)
       .limit(Number(limit))
+      .populate("assignedTo", "username displayName")
       .select("-__v"),
     Feedback.countDocuments(filter),
   ]);
@@ -91,7 +99,9 @@ const getAll = asyncHandler(async (req, res) => {
 });
 
 const getById = asyncHandler(async (req, res) => {
-  const feedback = await Feedback.findById(req.params.id).select("-__v");
+  const feedback = await Feedback.findById(req.params.id)
+    .populate("assignedTo", "username displayName")
+    .select("-__v");
 
   if (!feedback) {
     const err = new Error("Feedback not found");
@@ -106,7 +116,7 @@ const getById = asyncHandler(async (req, res) => {
 });
 
 const getPriorityQueue = asyncHandler(async (req, res) => {
-  const { level, category, search, limit = 20, page = 1 } = req.query;
+  const { level, category, search, status, assignedTo, limit = 20, page = 1 } = req.query;
 
   const filter = {
     priorityLevel: { $in: ["critical", "high"] },
@@ -114,6 +124,12 @@ const getPriorityQueue = asyncHandler(async (req, res) => {
   if (level) filter.priorityLevel = level.toLowerCase();
   if (category) filter.issueCategory = category.toLowerCase();
   if (search) filter.senderEmail = { $regex: search.trim(), $options: "i" };
+  if (status) filter.status = status;
+  if (assignedTo === "unassigned") {
+    filter.$or = [{ assignedTo: null }, { assignedTo: { $exists: false } }];
+  } else if (assignedTo) {
+    filter.assignedTo = assignedTo;
+  }
 
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -122,6 +138,7 @@ const getPriorityQueue = asyncHandler(async (req, res) => {
       .sort({ priorityScore: -1, createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
+      .populate("assignedTo", "username displayName")
       .select("-__v"),
     Feedback.countDocuments(filter),
     Feedback.aggregate([
@@ -167,4 +184,56 @@ const getPriorityQueue = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { analyze, getAll, getById, getPriorityQueue };
+const updateFeedback = asyncHandler(async (req, res) => {
+  const { assignedTo, status, resolutionNote } = req.body;
+
+  const feedback = await Feedback.findById(req.params.id);
+  if (!feedback) {
+    const err = new Error("Feedback not found");
+    err.statusCode = HTTP_STATUS.NOT_FOUND;
+    throw err;
+  }
+
+  if (assignedTo !== undefined) {
+    if (req.user.username !== "admin") {
+      const err = new Error("Only admin can assign feedback");
+      err.statusCode = HTTP_STATUS.FORBIDDEN;
+      throw err;
+    }
+    feedback.assignedTo = assignedTo || null;
+  }
+  if (status && req.user.username !== "admin") {
+    if (!feedback.assignedTo) {
+      const err = new Error("Cannot change status on unassigned feedback");
+      err.statusCode = HTTP_STATUS.FORBIDDEN;
+      throw err;
+    }
+    if (feedback.assignedTo.toString() !== req.user.userId) {
+      const err = new Error("You can only update feedback assigned to you");
+      err.statusCode = HTTP_STATUS.FORBIDDEN;
+      throw err;
+    }
+  }
+  if (status) feedback.status = status;
+  if (resolutionNote !== undefined) feedback.resolutionNote = resolutionNote;
+
+  if (status === "resolved" && !feedback.resolvedAt) {
+    feedback.resolvedAt = new Date();
+  }
+  if (status && status !== "resolved") {
+    feedback.resolvedAt = null;
+  }
+
+  await feedback.save();
+
+  const populated = await Feedback.findById(feedback._id)
+    .populate("assignedTo", "username displayName")
+    .select("-__v");
+
+  sendSuccess(res, {
+    message: "Feedback updated",
+    data: populated,
+  });
+});
+
+module.exports = { analyze, getAll, getById, getPriorityQueue, updateFeedback };

@@ -75,6 +75,26 @@ const feedbackSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
     },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    status: {
+      type: String,
+      enum: ["new", "in_progress", "resolved"],
+      default: "new",
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
+    resolutionNote: {
+      type: String,
+      trim: true,
+      maxlength: [2000, "Resolution note cannot exceed 2000 characters"],
+      default: "",
+    },
   },
   {
     timestamps: true,
@@ -87,5 +107,7 @@ feedbackSchema.index({ senderEmail: 1 });
 feedbackSchema.index({ priorityScore: -1 });
 feedbackSchema.index({ priorityLevel: 1, priorityScore: -1 });
 feedbackSchema.index({ issueCategory: 1 });
+feedbackSchema.index({ status: 1, priorityScore: -1 });
+feedbackSchema.index({ assignedTo: 1 });
 
 module.exports = mongoose.model("Feedback", feedbackSchema);

@@ -10,6 +10,8 @@ const getDashboard = asyncHandler(async (_req, res) => {
     dailyTrend,
     topComplainters,
     sourceBreakdown,
+    unassignedUrgent,
+    statusBreakdown,
   ] = await Promise.all([
     Feedback.countDocuments(),
 
@@ -52,6 +54,16 @@ const getDashboard = asyncHandler(async (_req, res) => {
     Feedback.aggregate([
       { $group: { _id: "$source", count: { $sum: 1 } } },
     ]),
+
+    Feedback.countDocuments({
+      priorityLevel: { $in: ["critical", "high"] },
+      $or: [{ assignedTo: null }, { assignedTo: { $exists: false } }],
+      status: { $ne: "resolved" },
+    }),
+
+    Feedback.aggregate([
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]),
   ]);
 
   const sentiments = {};
@@ -77,6 +89,11 @@ const getDashboard = asyncHandler(async (_req, res) => {
     sources[s._id || "api"] = s.count;
   }
 
+  const statuses = {};
+  for (const s of statusBreakdown) {
+    statuses[s._id || "new"] = s.count;
+  }
+
   sendSuccess(res, {
     message: "Dashboard stats retrieved",
     data: {
@@ -84,6 +101,8 @@ const getDashboard = asyncHandler(async (_req, res) => {
       sentiments,
       priorities,
       sources,
+      statuses,
+      unassignedUrgent,
       dailyTrend,
       topComplainters: topComplainters.map((c) => ({
         email: c._id,

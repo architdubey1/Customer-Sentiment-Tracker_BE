@@ -1,7 +1,7 @@
 /**
- * Seeds the default dashboard admin user (username: admin, password: password).
+ * Seeds dashboard users.
  * Run once: node scripts/seedAdminUser.js
- * Or the server will ensure admin exists on startup if SEED_ADMIN_USER=true.
+ * Or the server will seed on startup if SEED_ADMIN_USER=true.
  */
 require("dotenv").config();
 const mongoose = require("mongoose");
@@ -9,10 +9,17 @@ const User = require("../database/models/User");
 const { hashPassword } = require("../utils/passwordHash");
 const logger = require("../logs/logger");
 
-const DEFAULT_ADMIN_USERNAME = "admin";
-const DEFAULT_ADMIN_PASSWORD = "password";
+const SEED_USERS = [
+  { username: "admin", displayName: "Admin" },
+  { username: "archit", displayName: "Archit" },
+  { username: "paritosh", displayName: "Paritosh" },
+  { username: "keshav", displayName: "Keshav" },
+  { username: "saksham", displayName: "Saksham" },
+];
 
-async function seedAdminUser() {
+const DEFAULT_PASSWORD = "password";
+
+async function seedUsers() {
   try {
     await mongoose.connect(process.env.MONGO_URI);
   } catch (err) {
@@ -20,23 +27,26 @@ async function seedAdminUser() {
     process.exit(1);
   }
 
-  const existing = await User.findOne({ username: DEFAULT_ADMIN_USERNAME });
-  if (existing) {
-    logger.info("Admin user already exists, skipping seed.");
-    await mongoose.disconnect();
-    return;
+  for (const { username, displayName } of SEED_USERS) {
+    const existing = await User.findOne({ username });
+    if (existing) {
+      logger.info(`User "${username}" already exists, skipping.`);
+      continue;
+    }
+
+    await User.create({
+      username,
+      displayName,
+      passwordHash: hashPassword(DEFAULT_PASSWORD),
+    });
+    logger.info(`User created: "${username}" (${displayName})`);
   }
 
-  const passwordHash = hashPassword(DEFAULT_ADMIN_PASSWORD);
-  await User.create({
-    username: DEFAULT_ADMIN_USERNAME,
-    passwordHash,
-  });
-  logger.info(`Admin user created: username="${DEFAULT_ADMIN_USERNAME}", password="${DEFAULT_ADMIN_PASSWORD}" (change in production)`);
   await mongoose.disconnect();
+  logger.info("Seed complete.");
 }
 
-seedAdminUser().catch((err) => {
+seedUsers().catch((err) => {
   logger.error("Seed failed:", err);
   process.exit(1);
 });

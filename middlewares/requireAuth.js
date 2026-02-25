@@ -2,7 +2,8 @@ const jwt = require("jsonwebtoken");
 const HTTP_STATUS = require("../constants/httpStatus");
 const { sendError } = require("../utils/response");
 
-const JWT_SECRET = process.env.JWT_SECRET || "css-dashboard-secret-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET environment variable is required");
 
 /**
  * Middleware to protect routes: expects Authorization: Bearer <token>.
