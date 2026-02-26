@@ -7,6 +7,7 @@ router.use(requireAuth);
 router.get("/", ctrl.listAgents);
 router.get("/default", ctrl.getDefault);
 router.post("/call-customer", ctrl.callCustomer);
+router.get("/call-status/:callSid", ctrl.callStatus);
 router.post("/end-call", ctrl.endCall);
 router.get("/:id", ctrl.getAgent);
 router.post("/:id/set-default", ctrl.setDefault);

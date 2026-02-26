@@ -263,6 +263,41 @@ exports.callCustomer = async (req, res) => {
   }
 };
 
+exports.callStatus = async (req, res) => {
+  try {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) {
+      return res.status(500).json({ error: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN not configured" });
+    }
+
+    const { callSid } = req.params;
+    if (!callSid) return res.status(400).json({ error: "callSid is required" });
+
+    const twilioRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+        },
+      }
+    );
+
+    if (!twilioRes.ok) {
+      const text = await twilioRes.text();
+      logger.error(`Twilio call status error: ${twilioRes.status} ${text}`);
+      return res.status(twilioRes.status).json({ error: "Failed to fetch call status" });
+    }
+
+    const data = await twilioRes.json();
+    res.json({ callSid: data.sid, status: data.status });
+  } catch (err) {
+    logger.error(`callStatus error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 exports.endCall = async (req, res) => {
   try {
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
