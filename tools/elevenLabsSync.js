@@ -204,10 +204,9 @@ async function startOutboundCall({ apiKey, agentId, agentPhoneNumberId, toNumber
     }
 
     const res = await client.conversationalAi.twilioOutboundCall(body);
-    if (!res.success) {
-      return { ok: false, error: res.message || "Outbound call failed" };
-    }
-    return { ok: true, callSid: res.callSid };
+    logger.info(`Outbound call response: ${JSON.stringify(res)}`);
+    const callSid = res.callSid || res.call_sid || res.sid || null;
+    return { ok: true, callSid };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error(`Outbound call error: ${msg}`);
