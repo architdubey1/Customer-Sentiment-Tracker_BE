@@ -14,19 +14,33 @@ const customerRoutes = require("./routes/customerRoutes");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const voiceAgentRoutes = require("./routes/voiceAgentRoutes");
+const chatRoutes = require("./routes/chatRoutes");
+const twilioWebhookController = require("./controllers/twilioWebhookController");
+const elevenLabsWebhookController = require("./controllers/elevenLabsWebhookController");
 const { notFoundHandler, globalErrorHandler } = require("./middlewares/errorHandler");
 const { startPolling } = require("./tools/cronPoller");
+const { startTwilioRecordingPolling } = require("./tools/twilioRecordingPoller");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined", { stream: logger.stream }));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
+
+/** Twilio recording status callback – no auth (Twilio POSTs here when recording is ready) */
+app.post("/webhooks/twilio-recording", twilioWebhookController.recordingStatus);
+
+/** ElevenLabs post-call audio – no auth (ElevenLabs POSTs here when call ends; works without Twilio recording) */
+app.post("/webhooks/elevenlabs-post-call", elevenLabsWebhookController.postCall);
+
+/** ElevenLabs post-call transcription – no auth (ElevenLabs POSTs here with transcript; enable in ElevenLabs dashboard) */
+app.post("/webhooks/elevenlabs-post-call-transcription", elevenLabsWebhookController.postCallTranscription);
 
 app.use("/api/auth", apiLimiter, authRoutes);
 app.use("/api", apiLimiter, apiKeyAuth);
@@ -36,6 +50,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/voice-agents", voiceAgentRoutes);
+app.use("/api/chats", chatRoutes);
 
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
@@ -67,6 +82,13 @@ const start = async () => {
     startPolling(interval);
   } else {
     logger.info("Auto-polling disabled (set AUTOMATE_POLLING=true to enable)");
+  }
+
+  if (process.env.TWILIO_RECORDING_POLLING === "true") {
+    const twilioInterval = Number(process.env.TWILIO_RECORDING_POLL_INTERVAL_MINUTES) || 3;
+    startTwilioRecordingPolling(twilioInterval);
+  } else {
+    logger.info("Twilio recording polling disabled (set TWILIO_RECORDING_POLLING=true to enable)");
   }
 
   app.listen(PORT, () => {
