@@ -13,5 +13,6 @@ router.patch("/:id", ctrl.patch);
 router.post("/:id/recording", ctrl.setRecording);
 router.post("/:id/generate-transcript", ctrl.generateTranscript);
 router.post("/:id/generate-summary", ctrl.generateSummary);
+router.post("/:id/extract-end-reason", ctrl.extractEndReason);
 
 module.exports = router;

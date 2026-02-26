@@ -4,6 +4,7 @@ const { uploadRecordingFromUrl } = require("../utils/uploadRecordingToS3");
 const { pollOnce } = require("../tools/twilioRecordingPoller");
 const { generateAndSaveTranscript } = require("../utils/transcribeRecording");
 const { summarizeTranscript } = require("../utils/summarizeTranscript");
+const { extractEndReasonFromSummary, extractEndReasonAndTicketResolved } = require("../utils/extractEndReason");
 const logger = require("../logs/logger");
 
 /**
@@ -51,6 +52,7 @@ exports.list = async (req, res) => {
       durationSeconds: c.durationSeconds,
       status: c.status,
       endReason: c.endReason,
+      ticketResolved: c.ticketResolved ?? null,
       hasRecording: Boolean(c.recordingS3Key),
     }));
     res.json(list);
@@ -74,6 +76,7 @@ exports.getById = async (req, res) => {
       startedAt: chat.startedAt,
       durationSeconds: chat.durationSeconds,
       endReason: chat.endReason,
+      ticketResolved: chat.ticketResolved ?? null,
       status: chat.status,
       transcript: chat.transcript,
       callSummary: chat.callSummary ?? null,
@@ -205,13 +208,42 @@ exports.generateSummary = async (req, res) => {
 };
 
 /**
+ * Extract end reason and ticket resolved from chat's call summary using OpenAI, optionally save to chat.
+ * Returns { endReason, ticketResolved }. Requires OPENAI_API_KEY and chat to have callSummary.
+ */
+exports.extractEndReason = async (req, res) => {
+  try {
+    const chat = await Chat.findById(req.params.id);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+    const summary = chat.callSummary && String(chat.callSummary).trim();
+    if (!summary) {
+      return res.status(400).json({ error: "No call summary available. Generate a summary first." });
+    }
+    const { endReason, ticketResolved } = await extractEndReasonAndTicketResolved(summary);
+    const saveToChat = req.query.save !== "false";
+    if (saveToChat) {
+      if (endReason) chat.endReason = endReason;
+      if (ticketResolved) chat.ticketResolved = ticketResolved;
+      if (endReason || ticketResolved) {
+        await chat.save();
+        logger.info(`Extracted and saved end reason / ticket resolved for chat ${chat._id}`);
+      }
+    }
+    res.json({ endReason: endReason || null, ticketResolved: ticketResolved || null });
+  } catch (err) {
+    logger.error(`chat extractEndReason error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
  * Optional: PATCH chat (duration, endReason, status, transcript, metadata).
  */
 exports.patch = async (req, res) => {
   try {
     const chat = await Chat.findById(req.params.id);
     if (!chat) return res.status(404).json({ error: "Chat not found" });
-    const allowed = ["durationSeconds", "endReason", "status", "transcript", "callSummary", "metadata"];
+    const allowed = ["durationSeconds", "endReason", "ticketResolved", "status", "transcript", "callSummary", "metadata"];
     for (const key of allowed) {
       if (req.body[key] !== undefined) chat[key] = req.body[key];
     }
@@ -223,6 +255,7 @@ exports.patch = async (req, res) => {
       startedAt: chat.startedAt,
       durationSeconds: chat.durationSeconds,
       endReason: chat.endReason,
+      ticketResolved: chat.ticketResolved ?? null,
       status: chat.status,
       hasRecording: Boolean(chat.recordingS3Key),
     });
