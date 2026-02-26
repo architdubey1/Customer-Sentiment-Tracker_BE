@@ -30,22 +30,37 @@ function extractPlaceholders(text) {
   return [...names];
 }
 
+/** When to consider ending the call. Used when user has not set a custom Call End prompt. */
+const DEFAULT_CALL_END_WHEN =
+  "Use the closing flow and end the call when: the task has been completed, the user requests to end the call, the user is busy, becomes unresponsive, the call goes to voicemail, the user is abusive, the user provides a callback time, or when explicitly instructed in the prompt.";
+
+/** Mandatory flow before ending: ask about resolving ticket; if decline/not satisfied, inform reassignment and 24–48h contact. */
+const CLOSING_FLOW =
+  "Before using the end_call tool you MUST follow this flow:\n" +
+  "1. If the issue has been successfully resolved, politely ask the customer if we may mark the ticket as resolved and close it.\n" +
+  "2. If the customer declines to close the ticket or is not fully satisfied, inform them that the case will be reassigned to a human executive within 24 hours, that they will be updated regarding the reassignment, and that the executive will contact them within 24–48 hours for further assistance. Then say a brief closing and use the end_call tool.\n" +
+  "3. If the customer agrees to close the ticket, say a brief thank-you and use the end_call tool.";
+
 function buildAgentPrompt(config) {
   const main = (config.prompt || "").trim();
   const callEndPrompt = (config.callEndPrompt || "").trim();
   const callEndMessage = (config.callEndMessage || "").trim();
-  if (!callEndPrompt) return main;
 
-  const closingInstruction =
-    callEndMessage.length > 0
-      ? `Before ending the call, say this closing message (or a short, polite, context-aware variant): "${callEndMessage}". Then use the end_call tool to end the conversation.`
-      : "Before ending, say a short, polite, context-aware closing message. Then use the end_call tool to end the conversation.";
+  const whenToEnd = callEndPrompt.length > 0 ? callEndPrompt : DEFAULT_CALL_END_WHEN;
   const uninterruptible =
     config.uninterruptibleReasons?.length > 0
       ? ` Do not be interrupted when: ${config.uninterruptibleReasons.join(", ")}.`
       : "";
 
-  return `${main}\n\n### Call End\n${callEndPrompt}${uninterruptible}\n\n${closingInstruction}`;
+  const closingMessageLine =
+    callEndMessage.length > 0
+      ? `If you use a fixed closing phrase, prefer this (or a short variant): "${callEndMessage}". `
+      : "";
+
+  const closingInstruction =
+    `${CLOSING_FLOW}\n\n${closingMessageLine}Only after completing the flow above, use the end_call tool to end the conversation.`;
+
+  return `${main}\n\n### Call End\n\nWhen to end: ${whenToEnd}${uninterruptible}\n\n${closingInstruction}`;
 }
 
 /** Default client_events when not overridden (includes interruption for natural conversation). */
@@ -113,7 +128,7 @@ function buildConversationConfig(config) {
             type: "system",
             name: "end_call",
             description:
-              "End the call after saying a short closing message. Use when the task is complete, the user asks to hang up, or when the Call End conditions in the prompt are met.",
+              "End the call. Use ONLY after you have followed the full Call End section in your prompt: (1) ask if the ticket may be marked resolved, (2) if the customer declines or is not satisfied, inform them the case will be reassigned to a human executive within 24 hours and they will be contacted within 24–48 hours, then say a brief closing. After completing that flow, call this tool to end the conversation.",
             params: { system_tool_type: "end_call" },
           },
         ],

@@ -30,6 +30,13 @@ const chatSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    /** Whether the ticket was resolved (extracted from summary or set manually). "yes" | "no" | null */
+    ticketResolved: {
+      type: String,
+      trim: true,
+      enum: ["yes", "no"],
+      default: null,
+    },
     status: {
       type: String,
       enum: ["active", "completed", "no_response", "unknown"],
