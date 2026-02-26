@@ -1,10 +1,12 @@
 const VoiceAgent = require("../database/models/VoiceAgent");
+const Chat = require("../database/models/Chat");
 const { getAgentReply } = require("../tools/voiceBotChat");
 const {
   syncAgentToElevenLabs,
   getSignedUrl: fetchSignedUrl,
   startOutboundCall,
 } = require("../tools/elevenLabsSync");
+const { startTwilioRecording } = require("../utils/twilioStartRecording");
 const logger = require("../logs/logger");
 
 const DEFAULT_AGENT = {
@@ -222,17 +224,39 @@ exports.callCustomer = async (req, res) => {
     if (toNumber && !toNumber.startsWith("+")) {
       toNumber = "+91" + toNumber;
     }
+    const chat = await Chat.create({
+      agentId: agent.agentId,
+      channel: "phone",
+      metadata: { toNumber },
+    });
     const result = await startOutboundCall({
       apiKey,
       agentId: agent.elevenlabsAgentId,
       agentPhoneNumberId: phoneNumberId,
       toNumber,
-      dynamicVariables,
+      dynamicVariables: { ...(dynamicVariables || {}), chat_id: chat._id.toString() },
     });
 
+    if (!result.ok) {
+      await Chat.findByIdAndDelete(chat._id);
+      return res.status(500).json({ error: result.error });
+    }
+    chat.metadata = { ...(chat.metadata || {}), callSid: result.callSid };
+    await chat.save();
+    const callbackUrl = process.env.WEBHOOK_BASE_URL
+      ? `${process.env.WEBHOOK_BASE_URL.replace(/\/$/, "")}/webhooks/twilio-recording`
+      : null;
+    const recordingResult = await startTwilioRecording(result.callSid, callbackUrl);
     logger.info(`callCustomer result: ${JSON.stringify(result)}`);
     if (!result.ok) return res.status(500).json({ error: result.error });
-    res.json({ ...result, usedAgent: agent.agentId });
+    res.json({
+      ...result,
+      usedAgent: agent.agentId,
+      chatId: chat._id.toString(),
+      recordingStarted: recordingResult.ok,
+      recordingSid: recordingResult.recordingSid || null,
+      recordingError: recordingResult.error || null,
+    });
   } catch (err) {
     logger.error(`callCustomer error: ${err.message}`);
     res.status(500).json({ error: err.message });
@@ -302,16 +326,36 @@ exports.startPhoneCall = async (req, res) => {
     if (toNumber && !toNumber.startsWith("+")) {
       toNumber = "+91" + toNumber;
     }
+    const chat = await Chat.create({
+      agentId: agent.agentId,
+      channel: "phone",
+      metadata: { toNumber },
+    });
     const result = await startOutboundCall({
       apiKey,
       agentId: agent.elevenlabsAgentId,
       agentPhoneNumberId: phoneNumberId,
       toNumber,
-      dynamicVariables,
+      dynamicVariables: { ...(dynamicVariables || {}), chat_id: chat._id.toString() },
     });
 
-    if (!result.ok) return res.status(500).json({ error: result.error });
-    res.json(result);
+    if (!result.ok) {
+      await Chat.findByIdAndDelete(chat._id);
+      return res.status(500).json({ error: result.error });
+    }
+    chat.metadata = { ...(chat.metadata || {}), callSid: result.callSid };
+    await chat.save();
+    const callbackUrl = process.env.WEBHOOK_BASE_URL
+      ? `${process.env.WEBHOOK_BASE_URL.replace(/\/$/, "")}/webhooks/twilio-recording`
+      : null;
+    const recordingResult = await startTwilioRecording(result.callSid, callbackUrl);
+    res.json({
+      ...result,
+      chatId: chat._id.toString(),
+      recordingStarted: recordingResult.ok,
+      recordingSid: recordingResult.recordingSid || null,
+      recordingError: recordingResult.error || null,
+    });
   } catch (err) {
     logger.error(`startPhoneCall error: ${err.message}`);
     res.status(500).json({ error: err.message });
