@@ -219,7 +219,7 @@ exports.callCustomer = async (req, res) => {
       await agent.save();
     }
 
-    const { toNumber: rawNumber, dynamicVariables } = req.body;
+    const { toNumber: rawNumber, dynamicVariables, feedbackId } = req.body;
     let toNumber = (rawNumber || "").trim().replace(/\s+/g, "");
     if (toNumber && !toNumber.startsWith("+")) {
       toNumber = "+91" + toNumber;
@@ -228,6 +228,7 @@ exports.callCustomer = async (req, res) => {
       agentId: agent.agentId,
       channel: "phone",
       metadata: { toNumber },
+      ...(feedbackId ? { feedbackId } : {}),
     });
     const result = await startOutboundCall({
       apiKey,

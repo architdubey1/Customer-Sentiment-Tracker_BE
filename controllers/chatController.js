@@ -1,4 +1,5 @@
 const Chat = require("../database/models/Chat");
+const Feedback = require("../database/models/Feedback");
 const { getPresignedPlaybackUrl, isConfigured } = require("../config/s3");
 const { uploadRecordingFromUrl } = require("../utils/uploadRecordingToS3");
 const { pollOnce } = require("../tools/twilioRecordingPoller");
@@ -77,6 +78,7 @@ exports.getById = async (req, res) => {
       durationSeconds: chat.durationSeconds,
       endReason: chat.endReason,
       ticketResolved: chat.ticketResolved ?? null,
+      feedbackId: chat.feedbackId ? chat.feedbackId.toString() : null,
       status: chat.status,
       transcript: chat.transcript,
       callSummary: chat.callSummary ?? null,
@@ -229,7 +231,28 @@ exports.extractEndReason = async (req, res) => {
         logger.info(`Extracted and saved end reason / ticket resolved for chat ${chat._id}`);
       }
     }
-    res.json({ endReason: endReason || null, ticketResolved: ticketResolved || null });
+
+    // Auto-resolve linked feedback when the bot confirms ticket is resolved
+    let feedbackResolved = false;
+    if (ticketResolved === "yes" && chat.feedbackId) {
+      try {
+        const feedback = await Feedback.findById(chat.feedbackId);
+        if (feedback && feedback.status !== "resolved") {
+          feedback.status = "resolved";
+          feedback.resolvedAt = new Date();
+          if (!feedback.resolutionNote) {
+            feedback.resolutionNote = `Auto-resolved: voice bot call confirmed ticket resolved (Chat ${chat._id})`;
+          }
+          await feedback.save();
+          feedbackResolved = true;
+          logger.info(`Auto-resolved feedback ${chat.feedbackId} from chat ${chat._id} (ticketResolved=yes)`);
+        }
+      } catch (e) {
+        logger.warn(`Failed to auto-resolve feedback ${chat.feedbackId}: ${e.message}`);
+      }
+    }
+
+    res.json({ endReason: endReason || null, ticketResolved: ticketResolved || null, feedbackResolved });
   } catch (err) {
     logger.error(`chat extractEndReason error: ${err.message}`);
     res.status(500).json({ error: err.message });

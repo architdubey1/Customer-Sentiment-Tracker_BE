@@ -58,6 +58,12 @@ const chatSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    /** Link to the Feedback this call is about (set when calling from Priority Queue) */
+    feedbackId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Feedback",
+      default: null,
+    },
   },
   { timestamps: true }
 );
